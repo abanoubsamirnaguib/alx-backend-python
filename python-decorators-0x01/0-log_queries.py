@@ -4,6 +4,7 @@ Module for SQL query logging decorator
 """
 import sqlite3
 import functools
+from datetime import datetime
 
 
 def log_queries():
@@ -20,8 +21,9 @@ def log_queries():
             if not query and args:
                 query = args[0]
             
-            # Log the query
-            print(f"Query: {query}")
+            # Log the query with timestamp
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            print(f"[{current_time}] Query: {query}")
             
             # Execute the original function
             return func(*args, **kwargs)
