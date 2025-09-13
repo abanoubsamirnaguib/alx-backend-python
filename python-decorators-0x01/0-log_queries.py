@@ -10,7 +10,7 @@ def log_queries():
     """
     Decorator that logs SQL queries before executing them
     Returns:
-        The wrapped function
+        The wrapped function 
     """
     def decorator(func):
         @functools.wraps(func)
