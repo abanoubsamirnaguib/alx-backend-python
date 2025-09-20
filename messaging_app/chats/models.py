@@ -61,6 +61,8 @@ class User(AbstractUser):
         null=False,
         blank=False
     )
+
+    password = models.CharField(max_length=128, null=False, blank=False)
     
     class Meta:
         db_table = 'chats_user'
@@ -87,7 +89,7 @@ class Conversation(models.Model):
         db_index=True
     )
     
-    user = models.OneToOneField(
+    participants = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
         related_name='conversation',
@@ -101,13 +103,13 @@ class Conversation(models.Model):
         db_table = 'chats_conversation'
         indexes = [
             models.Index(fields=['conversation_id']),
-            models.Index(fields=['user']),
+            models.Index(fields=['participants']),
             models.Index(fields=['created_at']),
         ]
         ordering = ['-updated_at']
     
     def __str__(self):
-        return f"Conversation for {self.user.username}"
+        return f"Conversation for {self.participants.username}"
 
 
 class Message(models.Model):
