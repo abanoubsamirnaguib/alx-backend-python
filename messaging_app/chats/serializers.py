@@ -48,6 +48,17 @@ class MessageSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ('message_id', 'sent_at', 'edited_at')
 
+    def create(self, validated_data):
+        # If sender was not provided via sender_id, try to use the authenticated user
+        if 'sender' not in validated_data or validated_data.get('sender') is None:
+            request = self.context.get('request') if self.context else None
+            if request and hasattr(request, 'user') and not request.user.is_anonymous:
+                validated_data['sender'] = request.user
+            else:
+                raise serializers.ValidationError("Sender must be provided or request.user must be authenticated.")
+
+        return super().create(validated_data)
+
 
 class ConversationSerializer(serializers.ModelSerializer):
     # `participants` is a OneToOneField to User in the models; expose nested user info
@@ -58,7 +69,8 @@ class ConversationSerializer(serializers.ModelSerializer):
 
     # Nested messages
     messages = MessageSerializer(many=True, read_only=True)
-
+    # Useful computed/read-only values
+    message_count = serializers.SerializerMethodField(read_only=True)
     class Meta:
         model = Conversation
         fields = (
@@ -69,7 +81,15 @@ class ConversationSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         # participants already set via participants_id -> participants
+        participants = validated_data.get('participants')
+        # Prevent creating a second conversation for the same user
+        if participants and Conversation.objects.filter(participants=participants).exists():
+            raise serializers.ValidationError({'participants': 'User already has a conversation.'})
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
         return super().update(instance, validated_data)
+
+    def get_message_count(self, obj):
+        return obj.messages.count()
+
