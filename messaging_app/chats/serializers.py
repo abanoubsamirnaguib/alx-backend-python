@@ -71,6 +71,8 @@ class ConversationSerializer(serializers.ModelSerializer):
     messages = MessageSerializer(many=True, read_only=True)
     # Useful computed/read-only values
     message_count = serializers.SerializerMethodField(read_only=True)
+    last_message_preview = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Conversation
         fields = (
@@ -93,3 +95,14 @@ class ConversationSerializer(serializers.ModelSerializer):
     def get_message_count(self, obj):
         return obj.messages.count()
 
+    def get_last_message_preview(self, obj):
+        last = obj.messages.order_by('-sent_at').first()
+        if not last:
+            return None
+        preview = last.message_body[:100]
+        return {
+            'message_id': last.message_id,
+            'is_from_system': last.is_from_system,
+            'preview': preview,
+            'sent_at': last.sent_at,
+        }
