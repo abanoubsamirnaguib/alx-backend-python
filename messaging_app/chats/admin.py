@@ -35,9 +35,9 @@ class UserAdmin(BaseUserAdmin):
 class ConversationAdmin(admin.ModelAdmin):
     """Admin configuration for the Conversation model."""
     
-    list_display = ('conversation_id', 'user', 'get_message_count', 'created_at', 'updated_at')
+    list_display = ('conversation_id', 'participants', 'get_message_count', 'created_at', 'updated_at')
     list_filter = ('created_at', 'updated_at')
-    search_fields = ('conversation_id', 'user__username', 'user__email')
+    search_fields = ('conversation_id', 'participants__username', 'participants__email')
     readonly_fields = ('conversation_id', 'created_at', 'updated_at')
     ordering = ('-updated_at',)
     
