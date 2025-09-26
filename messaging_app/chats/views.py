@@ -2,6 +2,7 @@ from rest_framework import viewsets, permissions, status, filters
 from rest_framework.response import Response
 from rest_framework.decorators import action 
 from rest_framework.exceptions import PermissionDenied
+from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Conversation, Message
 from .serializers import ConversationSerializer, MessageSerializer
@@ -11,6 +12,8 @@ from .permissions import (
     CanManageOwnMessages,
     CanCreateConversation
 )
+from .filters import MessageFilter, ConversationFilter
+from .pagination import MessagePagination, ConversationPagination, CustomMessagePagination
 class ConversationViewSet(viewsets.ModelViewSet):
 	"""List and create conversations. Each user can have only one conversation.
 
@@ -21,9 +24,12 @@ class ConversationViewSet(viewsets.ModelViewSet):
 	queryset = Conversation.objects.all().select_related('participants')
 	serializer_class = ConversationSerializer
 	permission_classes = [IsParticipantOfConversation, CanCreateConversation]
-	filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+	filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filterset_class = ConversationFilter
 	search_fields = ['participants__username', 'participants__email']
 	ordering_fields = ['created_at', 'updated_at']
+	ordering = ['-updated_at']
+	pagination_class = ConversationPagination
 
 	def get_queryset(self):
 		user = self.request.user
@@ -116,9 +122,12 @@ class MessageViewSet(viewsets.ModelViewSet):
 	queryset = Message.objects.all().select_related('sender', 'conversation')
 	serializer_class = MessageSerializer
 	permission_classes = [IsParticipantOfConversation, CanManageOwnMessages]
-	filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+	filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filterset_class = MessageFilter
 	search_fields = ['message_body', 'sender__username', 'sender__email']
-	ordering_fields = ['sent_at']
+	ordering_fields = ['sent_at', 'edited_at']
+	ordering = ['-sent_at']
+	pagination_class = MessagePagination
 
 	def get_queryset(self):
 		"""
@@ -249,7 +258,7 @@ class MessageViewSet(viewsets.ModelViewSet):
 	@action(detail=False, methods=['get'])
 	def my_messages(self, request):
 		"""
-		Get all messages from the current user's conversation
+		Get all messages from the current user's conversation with pagination and filtering
 		"""
 		user = request.user
 		
@@ -264,6 +273,11 @@ class MessageViewSet(viewsets.ModelViewSet):
 			conversation__participants=user
 		).select_related('sender', 'conversation').order_by('-sent_at')
 		
+		# Apply additional filters if provided
+		filterset = MessageFilter(request.GET, queryset=messages)
+		if filterset.is_valid():
+			messages = filterset.qs
+		
 		page = self.paginate_queryset(messages)
 		if page is not None:
 			serializer = self.get_serializer(page, many=True)
@@ -271,4 +285,85 @@ class MessageViewSet(viewsets.ModelViewSet):
 		
 		serializer = self.get_serializer(messages, many=True)
 		return Response(serializer.data)
+	
+	@action(detail=False, methods=['get'])
+	def recent_messages(self, request):
+		"""
+		Get recent messages from the current user's conversation (last 24 hours)
+		"""
+		from datetime import timedelta
+		from django.utils import timezone
+		
+		user = request.user
+		
+		if not user.is_authenticated:
+			return Response(
+				{'error': 'Authentication required.'}, 
+				status=status.HTTP_401_UNAUTHORIZED
+			)
+		
+		# Get messages from last 24 hours
+		last_24_hours = timezone.now() - timedelta(hours=24)
+		messages = Message.objects.filter(
+			conversation__participants=user,
+			sent_at__gte=last_24_hours
+		).select_related('sender', 'conversation').order_by('-sent_at')
+		
+		page = self.paginate_queryset(messages)
+		if page is not None:
+			serializer = self.get_serializer(page, many=True)
+			return self.get_paginated_response(serializer.data)
+		
+		serializer = self.get_serializer(messages, many=True)
+		return Response(serializer.data)
+	
+	@action(detail=False, methods=['get'])
+	def search_messages(self, request):
+		"""
+		Search messages with advanced filtering and pagination
+		"""
+		user = request.user
+		
+		if not user.is_authenticated:
+			return Response(
+				{'error': 'Authentication required.'}, 
+				status=status.HTTP_401_UNAUTHORIZED
+			)
+		
+		# Base queryset
+		queryset = Message.objects.filter(
+			conversation__participants=user
+		).select_related('sender', 'conversation')
+		
+		# Apply filters
+		filterset = MessageFilter(request.GET, queryset=queryset)
+		if filterset.is_valid():
+			filtered_messages = filterset.qs.order_by('-sent_at')
+		else:
+			return Response(
+				{'error': 'Invalid filter parameters', 'details': filterset.errors}, 
+				status=status.HTTP_400_BAD_REQUEST
+			)
+		
+		# Apply pagination
+		page = self.paginate_queryset(filtered_messages)
+		if page is not None:
+			serializer = self.get_serializer(page, many=True)
+			response_data = self.get_paginated_response(serializer.data)
+			
+			# Add filter information to response
+			response_data.data['applied_filters'] = {
+				key: value for key, value in request.GET.items()
+				if value and key not in ['page', 'page_size']
+			}
+			return response_data
+		
+		serializer = self.get_serializer(filtered_messages, many=True)
+		return Response({
+			'results': serializer.data,
+			'applied_filters': {
+				key: value for key, value in request.GET.items()
+				if value and key not in ['page', 'page_size']
+			}
+		})
 
