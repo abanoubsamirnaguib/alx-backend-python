@@ -4,7 +4,12 @@ from rest_framework.decorators import action
 
 from .models import Conversation, Message
 from .serializers import ConversationSerializer, MessageSerializer
-from .permissions import IsOwnerOfConversation, IsMessageOwnerOrConversationParticipant, CanCreateConversation
+from .permissions import (
+    IsParticipantOfConversation, 
+    IsAuthenticatedAndParticipant, 
+    CanManageOwnMessages,
+    CanCreateConversation
+)
 class ConversationViewSet(viewsets.ModelViewSet):
 	"""List and create conversations. Each user can have only one conversation.
 
@@ -14,7 +19,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
 	"""
 	queryset = Conversation.objects.all().select_related('participants')
 	serializer_class = ConversationSerializer
-	permission_classes = [permissions.IsAuthenticated, IsOwnerOfConversation, CanCreateConversation]
+	permission_classes = [IsParticipantOfConversation, CanCreateConversation]
 	filter_backends = [filters.SearchFilter, filters.OrderingFilter]
 	search_fields = ['participants__username', 'participants__email']
 	ordering_fields = ['created_at', 'updated_at']
@@ -47,7 +52,7 @@ class MessageViewSet(viewsets.ModelViewSet):
 	"""
 	queryset = Message.objects.all().select_related('sender', 'conversation')
 	serializer_class = MessageSerializer
-	permission_classes = [permissions.IsAuthenticated, IsMessageOwnerOrConversationParticipant]
+	permission_classes = [IsParticipantOfConversation, CanManageOwnMessages]
 	filter_backends = [filters.SearchFilter, filters.OrderingFilter]
 	search_fields = ['message_body', 'sender__username', 'sender__email']
 	ordering_fields = ['sent_at']

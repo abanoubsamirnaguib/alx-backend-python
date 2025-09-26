@@ -1,6 +1,108 @@
 from rest_framework import permissions
 
 
+class IsParticipantOfConversation(permissions.BasePermission):
+    """
+    Custom permission class to ensure only participants in a conversation 
+    can send, view, update and delete messages in that conversation.
+    Only allows authenticated users to access the API.
+    """
+    
+    def has_permission(self, request, view):
+        """
+        Check if user is authenticated before allowing any access
+        """
+        return request.user and request.user.is_authenticated
+    
+    def has_object_permission(self, request, view, obj):
+        """
+        Object-level permission to only allow participants of a conversation 
+        to access its messages.
+        """
+        # Staff and superusers have full access
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+        
+        # For Message objects, check if user is the conversation participant
+        if hasattr(obj, 'conversation'):
+            return obj.conversation.participants == request.user
+        
+        # For Conversation objects, check if user is the participant
+        if hasattr(obj, 'participants'):
+            return obj.participants == request.user
+        
+        return False
+    
+    def get_queryset_filter(self, request, view):
+        """
+        Optional method to filter queryset based on user permissions
+        """
+        if request.user.is_staff or request.user.is_superuser:
+            return {}
+        return {'participants': request.user} if hasattr(view, 'get_queryset') else {}
+
+
+class IsAuthenticatedAndParticipant(permissions.BasePermission):
+    """
+    Permission that requires authentication and ensures users can only 
+    access conversations and messages they are participants in.
+    """
+    
+    def has_permission(self, request, view):
+        """Only allow authenticated users"""
+        return request.user and request.user.is_authenticated
+    
+    def has_object_permission(self, request, view, obj):
+        """Check if user is participant of the conversation"""
+        # Staff and superusers have full access
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+        
+        # For Message objects
+        if hasattr(obj, 'conversation'):
+            return obj.conversation.participants == request.user
+        
+        # For Conversation objects  
+        if hasattr(obj, 'participants'):
+            return obj.participants == request.user
+        
+        return False
+
+
+class CanManageOwnMessages(permissions.BasePermission):
+    """
+    Permission that allows users to manage their own messages within 
+    conversations they participate in.
+    """
+    
+    def has_permission(self, request, view):
+        """Only allow authenticated users"""
+        return request.user and request.user.is_authenticated
+    
+    def has_object_permission(self, request, view, obj):
+        """
+        Allow users to:
+        - View messages in conversations they participate in
+        - Edit/Delete only their own messages
+        """
+        # Staff and superusers have full access
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+        
+        # Check if user is participant in the conversation
+        is_participant = obj.conversation.participants == request.user
+        
+        if not is_participant:
+            return False
+        
+        # For safe methods (GET, HEAD, OPTIONS), allow if user is participant
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        
+        # For unsafe methods (PUT, PATCH, DELETE), only allow message owner
+        return obj.sender == request.user
+
+
 class IsOwnerOrReadOnly(permissions.BasePermission):
     """
     Custom permission to only allow owners of an object to edit it.
