@@ -1,6 +1,15 @@
 from django.urls import path, include
 from rest_framework import routers
 from .views import ConversationViewSet, MessageViewSet
+from .auth import (
+    CustomTokenObtainPairView, 
+    register, 
+    logout, 
+    user_profile, 
+    update_profile, 
+    change_password
+)
+from rest_framework_simplejwt.views import TokenRefreshView
 
 # Base router for top-level endpoints
 router = routers.DefaultRouter()
@@ -10,6 +19,14 @@ router.register(r'messages', MessageViewSet, basename='message')
 # Default to exposing top-level routes
 urlpatterns = [
 	path('', include(router.urls)),
+	# Authentication endpoints
+	path('auth/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+	path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+	path('auth/register/', register, name='register'),
+	path('auth/logout/', logout, name='logout'),
+	path('auth/profile/', user_profile, name='user_profile'),
+	path('auth/profile/update/', update_profile, name='update_profile'),
+	path('auth/change-password/', change_password, name='change_password'),
 ]
 
 # Optionally add nested routes if rest_framework_nested is available
