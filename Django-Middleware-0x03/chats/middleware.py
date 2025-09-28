@@ -6,7 +6,7 @@ from django.http import HttpResponseForbidden, JsonResponse
 from django.utils.deprecation import MiddlewareMixin
 from collections import defaultdict, deque
 
-class RequestLoggingMiddleware:
+class RequestLoggingMiddleware: 
     """Logs each request with timestamp, user (or anonymous), and path to a file."""
     def __init__(self, get_response):
         self.get_response = get_response
