@@ -1,6 +1,7 @@
 import os
 import threading
 from datetime import datetime, timedelta
+from django.utils import timezone
 from django.conf import settings
 from django.http import HttpResponseForbidden, JsonResponse
 from django.utils.deprecation import MiddlewareMixin
@@ -27,19 +28,38 @@ class RequestLoggingMiddleware:
         return self.get_response(request)
 
 class RestrictAccessByTimeMiddleware:
-    """Restricts access to chat endpoints outside allowed hours."""
+    """Restricts access to chat endpoints outside configured allowed hours.
+
+    Configuration options (in settings.py):
+    - ALLOWED_CHAT_HOURS: tuple(start_hour, end_hour) 24h format. If start < end it is a normal
+      same-day window (e.g. (18,21) means 18:00 <= hour < 21:00). If start > end it is treated as
+      a wrap-around window crossing midnight (e.g. (21,6) means 21:00 <= hour OR hour < 06:00).
+    Defaults to (18,21) if not provided.
+    """
     def __init__(self, get_response):
         self.get_response = get_response
-        # Expect a tuple (start_hour, end_hour) in 24h format
         self.allowed_hours = getattr(settings, 'ALLOWED_CHAT_HOURS', (18, 21))
+        if (not isinstance(self.allowed_hours, (list, tuple)) or
+                len(self.allowed_hours) != 2 or
+                any(not isinstance(h, int) or h < 0 or h > 23 for h in self.allowed_hours)):
+            # Fallback to safe default
+            self.allowed_hours = (18, 21)
+
+    def _is_allowed_hour(self, hour: int) -> bool:
+        start_hour, end_hour = self.allowed_hours
+        if start_hour == end_hour:
+            # Degenerate case: allow nothing (or everything). We'll treat as full restriction.
+            return False
+        if start_hour < end_hour:
+            return start_hour <= hour < end_hour
+        # Wrap-around window
+        return hour >= start_hour or hour < end_hour
+
     def __call__(self, request):
-        # Only restrict API chat paths
         if request.path.startswith('/api/'):
-            now_hour = datetime.utcnow().hour  # Use UTC to align with TIME_ZONE = UTC
-            start_hour, end_hour = self.allowed_hours
-            # Allowed window: start <= hour < end
-            allowed = start_hour <= now_hour < end_hour
-            if not allowed:
+            # Use timezone aware current time
+            now_hour = timezone.now().astimezone(timezone.utc).hour if timezone.is_aware(timezone.now()) else timezone.now().hour
+            if not self._is_allowed_hour(now_hour):
                 return HttpResponseForbidden('Chat access is restricted during this time.')
         return self.get_response(request)
 
