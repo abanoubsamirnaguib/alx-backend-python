@@ -15,7 +15,8 @@ class RequestLoggingMiddleware:
     def __call__(self, request):
         user = getattr(request, 'user', None)
         user_repr = getattr(user, 'username', 'anonymous') if user and user.is_authenticated else 'anonymous'
-        line = f"{datetime.now().isoformat()} - User: {user_repr} - Path: {request.path}\n"
+        # Match required format: f"{datetime.now()} - User: {user} - Path: {request.path}"
+        line = f"{datetime.now()} - User: {user_repr} - Path: {request.path}\n"
         try:
             with self._lock:
                 with open(self.log_file, 'a', encoding='utf-8') as f:
