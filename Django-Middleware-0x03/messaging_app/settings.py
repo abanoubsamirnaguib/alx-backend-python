@@ -33,7 +33,8 @@ MIDDLEWARE = [
     'chats.middleware.RequestLoggingMiddleware',
     'chats.middleware.RestrictAccessByTimeMiddleware',
     'chats.middleware.OffensiveLanguageMiddleware',
-    'chats.middleware.RolePermissionMiddleware',
+    'chats.middleware.RolePermissionMiddleware',  # legacy broader role control
+    'chats.middleware.RolepermissionMiddleware',  # requirement-specific (admin/moderator)
 ]
 
 ROOT_URLCONF = 'messaging_app.urls'
@@ -117,4 +118,4 @@ CHAT_MESSAGE_RATE_LIMIT = 5  # messages per window
 CHAT_MESSAGE_RATE_WINDOW_SECONDS = 60  # 1 minute window
 ALLOWED_CHAT_HOURS = (18, 21)  # 6PM to 9PM (inclusive start, exclusive end)
 ROLE_PROTECTED_PATH_PREFIXES = ['/api/messages', '/api/conversations']
-ROLE_ALLOWED_ROLES = {'admin', 'host', 'moderator'}  # 'moderator' may not yet exist in model
+ROLE_ALLOWED_ROLES = {'admin', 'moderator'}  # enforced by RolepermissionMiddleware

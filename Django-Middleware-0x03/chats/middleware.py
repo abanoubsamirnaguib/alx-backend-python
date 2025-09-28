@@ -95,7 +95,9 @@ class RolePermissionMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
         self.protected_prefixes = getattr(settings, 'ROLE_PROTECTED_PATH_PREFIXES', ['/api/messages', '/api/conversations'])
-        self.allowed_roles = getattr(settings, 'ROLE_ALLOWED_ROLES', {'admin', 'host'})
+        # Backwards compatibility: previous implementation allowed 'host'.
+        # New requirement (middleware 4) restricts to admin or moderator only.
+        self.allowed_roles = getattr(settings, 'ROLE_ALLOWED_ROLES', {'admin', 'moderator'})
     def __call__(self, request):
         path = request.path
         if any(path.startswith(prefix) for prefix in self.protected_prefixes):
@@ -108,4 +110,34 @@ class RolePermissionMiddleware:
             role = getattr(user, 'role', None)
             if role not in self.allowed_roles:
                 return HttpResponseForbidden('You do not have permission to access this resource.')
+        return self.get_response(request)
+
+class RolepermissionMiddleware:
+    """Role-based access control for chat actions.
+
+    Requirement: Only users with role 'admin' or 'moderator' may access protected endpoints.
+    If user lacks required role -> 403 Forbidden.
+
+    This class intentionally matches the exact required name `RolepermissionMiddleware`.
+    Configuration:
+      ROLE_PROTECTED_PATH_PREFIXES (list[str]) – URL path prefixes to guard.
+      ROLE_ALLOWED_ROLES (iterable[str]) – Allowed roles (default {'admin','moderator'}).
+    Staff / superusers are always allowed.
+    """
+    def __init__(self, get_response):
+        self.get_response = get_response
+        self.protected_prefixes = getattr(settings, 'ROLE_PROTECTED_PATH_PREFIXES', ['/api/messages', '/api/conversations'])
+        self.allowed_roles = getattr(settings, 'ROLE_ALLOWED_ROLES', {'admin', 'moderator'})
+
+    def __call__(self, request):
+        path = request.path
+        if any(path.startswith(prefix) for prefix in self.protected_prefixes):
+            user = getattr(request, 'user', None)
+            if not user or not user.is_authenticated:
+                return HttpResponseForbidden('Authentication required.')
+            if user.is_staff or user.is_superuser:
+                return self.get_response(request)
+            role = getattr(user, 'role', None)
+            if role not in self.allowed_roles:
+                return HttpResponseForbidden('You do not have permission to perform this action.')
         return self.get_response(request)
