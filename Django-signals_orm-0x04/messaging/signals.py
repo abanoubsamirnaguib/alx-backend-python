@@ -1,7 +1,9 @@
-from django.db.models.signals import post_save, pre_save
+from django.db.models.signals import post_save, pre_save, post_delete
 from django.dispatch import receiver
 
 from django.utils import timezone
+
+from django.contrib.auth import get_user_model
 
 from .models import Message, Notification, MessageHistory
 
@@ -36,3 +38,22 @@ def store_previous_version(sender, instance, **kwargs):
         instance.edited = True
         if instance.edited_at is None:
             instance.edited_at = timezone.now()
+
+
+# --- User cleanup signals ---
+User = get_user_model()
+
+
+@receiver(post_delete, sender=User)
+def delete_user_related_data(sender, instance, **kwargs):
+    """Extra cleanup after a user is deleted.
+
+    Thanks to on_delete=CASCADE most related rows (messages, notifications, histories
+    linked via messages) are already removed automatically by the database.
+
+    We still explicitly remove MessageHistory rows where the user only appears as
+    'edited_by' (that FK uses SET_NULL so they would otherwise remain). The
+    requirement says: delete all message histories associated with the user.
+    """
+    # Delete histories where user was the editor (not covered by CASCADE)
+    MessageHistory.objects.filter(edited_by=instance).delete()
