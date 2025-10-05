@@ -67,3 +67,33 @@ class MessageSignalTests(TestCase):
         # newest history corresponds to previous version 'v3'
         newest = MessageHistory.objects.order_by('-edited_at').first()
         self.assertEqual(newest.old_content, 'v3')
+
+    # --- Thread / reply tests ---
+    def test_create_reply(self):
+        root = Message.objects.create(sender=self.alice, receiver=self.bob, content='Root')
+        reply = Message.objects.create(sender=self.bob, receiver=self.alice, content='Hi', parent_message=root)
+        self.assertEqual(root.replies.count(), 1)
+        self.assertEqual(reply.parent_message, root)
+        self.assertFalse(reply.is_root)
+        self.assertTrue(root.is_root)
+
+    def test_thread_helpers_flat(self):
+        root = Message.objects.create(sender=self.alice, receiver=self.bob, content='Root')
+        r1 = Message.objects.create(sender=self.bob, receiver=self.alice, content='r1', parent_message=root)
+        r2 = Message.objects.create(sender=self.alice, receiver=self.bob, content='r2', parent_message=root)
+        r1_1 = Message.objects.create(sender=self.alice, receiver=self.bob, content='r1_1', parent_message=r1)
+        flat = root.get_all_replies()
+        self.assertEqual({m.content for m in flat}, {'r1', 'r2', 'r1_1'})
+        thread = r1_1.get_thread_messages()  # starting from deeper reply climbs to root
+        self.assertEqual(thread[0], root)
+        self.assertEqual(len(thread), 4)
+
+    def test_build_thread_tree(self):
+        root = Message.objects.create(sender=self.alice, receiver=self.bob, content='Root')
+        r1 = Message.objects.create(sender=self.bob, receiver=self.alice, content='r1', parent_message=root)
+        Message.objects.create(sender=self.alice, receiver=self.bob, content='r1_1', parent_message=r1)
+        tree = root.build_thread_tree()
+        self.assertEqual(tree['content'], 'Root')
+        self.assertEqual(len(tree['replies']), 1)
+        self.assertEqual(tree['replies'][0]['content'], 'r1')
+        self.assertEqual(len(tree['replies'][0]['replies']), 1)
