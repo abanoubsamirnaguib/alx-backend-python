@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.cache import cache_page
 from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse, HttpResponseNotAllowed, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404
@@ -87,6 +88,7 @@ def create_message(request):
 
 
 @login_required
+@cache_page(60)
 def inbox_threads(request):
     """List root messages sent to the current user plus first-level replies.
 
