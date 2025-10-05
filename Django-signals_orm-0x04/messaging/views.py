@@ -114,6 +114,33 @@ def inbox_threads(request):
 
 
 @login_required
+def unread_inbox(request):
+    """Return ONLY unread messages for the current user.
+
+    Uses the secondary manager Message.unread plus only() to trim columns
+    (we still need sender/receiver FKs so include their ids for DRF/basic JSON).
+    Keeping logic very small & junior friendly.
+    """
+    qs = (
+        Message.unread.for_user(request.user)
+        .only('id', 'content', 'sender', 'receiver', 'created_at')
+        .select_related('sender', 'receiver')
+        .order_by('-created_at')
+    )
+    results = []
+    for m in qs[:50]:
+        results.append({
+            'id': m.id,
+            'content': m.content,
+            'sender': getattr(m.sender, 'username', m.sender_id),
+            'receiver': getattr(m.receiver, 'username', m.receiver_id),
+            'created_at': timezone.localtime(m.created_at).isoformat() if m.created_at else None,
+            'read': m.read,
+        })
+    return JsonResponse({'results': results})
+
+
+@login_required
 def thread_detail(request, message_id):
     """Return full thread (root + nested replies) for a given message.
 

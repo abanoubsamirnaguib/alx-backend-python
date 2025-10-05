@@ -26,6 +26,24 @@ class MessageQuerySet(models.QuerySet):
             )
         )
 
+    # simple helper to get unread messages for a user (receiver)
+    def unread_for(self, user):
+        return self.filter(receiver=user, read=False)
+
+
+class UnreadMessagesManager(models.Manager):
+    """Manager that returns only unread messages.
+
+    Usage: Message.unread.for_user(user)
+    (Keeping things very explicit / junior friendly.)
+    """
+
+    def get_queryset(self):  # base unread set
+        return super().get_queryset().filter(read=False)
+
+    def for_user(self, user):
+        return self.get_queryset().filter(receiver=user)
+
 
 class Message(models.Model):
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
@@ -51,8 +69,11 @@ class Message(models.Model):
         blank=True,
         related_name='edited_messages'
     )
+    # NEW: has the receiver read this message yet?
+    read = models.BooleanField(default=False, help_text="Set to True when receiver opens/reads it")
 
     objects = MessageQuerySet.as_manager()
+    unread = UnreadMessagesManager()  # secondary manager focusing on unread only
 
     class Meta:
         ordering = ['-created_at']
