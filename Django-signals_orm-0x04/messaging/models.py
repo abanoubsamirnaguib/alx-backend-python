@@ -2,47 +2,9 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from .managers import MessageQuerySet, UnreadMessagesManager
+
 User = settings.AUTH_USER_MODEL
-
-
-class MessageQuerySet(models.QuerySet):
-    """Extra helpers for optimizing message + replies fetching."""
-
-    def with_participants(self):
-        # pull in FK users and potential parent/edited_by in one go
-        return self.select_related(
-            'sender', 'receiver', 'parent_message', 'edited_by'
-        )
-
-    def roots(self):
-        return self.filter(parent_message__isnull=True)
-
-    def with_immediate_replies(self):
-        # prefetch only first level replies (each with sender/receiver)
-        return self.with_participants().prefetch_related(
-            models.Prefetch(
-                'replies',
-                queryset=Message.objects.with_participants().order_by('created_at')
-            )
-        )
-
-    # simple helper to get unread messages for a user (receiver)
-    def unread_for(self, user):
-        return self.filter(receiver=user, read=False)
-
-
-class UnreadMessagesManager(models.Manager):
-    """Manager that returns only unread messages.
-
-    Usage: Message.unread.for_user(user)
-    (Keeping things very explicit / junior friendly.)
-    """
-
-    def get_queryset(self):  # base unread set
-        return super().get_queryset().filter(read=False)
-
-    def for_user(self, user):
-        return self.get_queryset().filter(receiver=user)
 
 
 class Message(models.Model):

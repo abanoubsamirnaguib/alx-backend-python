@@ -122,7 +122,7 @@ def unread_inbox(request):
     Keeping logic very small & junior friendly.
     """
     qs = (
-        Message.unread.for_user(request.user)
+        Message.unread.unread_for_user(request.user)
         .only('id', 'content', 'sender', 'receiver', 'created_at')
         .select_related('sender', 'receiver')
         .order_by('-created_at')
