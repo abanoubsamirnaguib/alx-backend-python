@@ -14,6 +14,8 @@ from .permissions import (
 )
 from .filters import MessageFilter, ConversationFilter
 from .pagination import MessagePagination, ConversationPagination, CustomMessagePagination
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 class ConversationViewSet(viewsets.ModelViewSet):
 	"""List and create conversations. Each user can have only one conversation.
 
@@ -128,6 +130,23 @@ class MessageViewSet(viewsets.ModelViewSet):
 	ordering_fields = ['sent_at', 'edited_at']
 	ordering = ['-sent_at']
 	pagination_class = MessagePagination
+
+	@method_decorator(cache_page(60))
+	def list(self, request, *args, **kwargs):
+		"""Cached list of messages for 60 seconds.
+
+		Relies on get_queryset which already scopes messages by permissions.
+		Uses standard DRF pagination if enabled.
+		"""
+		queryset = self.filter_queryset(self.get_queryset())
+
+		page = self.paginate_queryset(queryset)
+		if page is not None:
+			serializer = self.get_serializer(page, many=True)
+			return self.get_paginated_response(serializer.data)
+
+		serializer = self.get_serializer(queryset, many=True)
+		return Response(serializer.data)
 
 	def get_queryset(self):
 		"""
