@@ -55,5 +55,12 @@ def delete_user_related_data(sender, instance, **kwargs):
     'edited_by' (that FK uses SET_NULL so they would otherwise remain). The
     requirement says: delete all message histories associated with the user.
     """
-    # Delete histories where user was the editor (not covered by CASCADE)
+    # Explicit deletions (even though CASCADE handles most) to satisfy requirement.
+    # 1. Delete notifications that directly belong to the user
+    Notification.objects.filter(user=instance).delete()
+    # 2. Delete messages the user sent or received (this will also cascade delete
+    #    notifications tied to those messages and message history rows for them)
+    Message.objects.filter(sender=instance).delete()
+    Message.objects.filter(receiver=instance).delete()
+    # 3. Delete histories where user was only the editor (SET_NULL would leave them)
     MessageHistory.objects.filter(edited_by=instance).delete()
