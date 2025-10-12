@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -21,12 +22,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-#alvi%pq1aw(49a(_t+0zbz3m8x@r+9#f$g6qw#1#x1*e(+xq$'
+# Prefer environment variable DJANGO_SECRET_KEY; fallback is for local/dev only
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-#alvi%pq1aw(49a(_t+0zbz3m8x@r+9#f$g6qw#1#x1*e(+xq$')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', '1').lower() in ('1', 'true', 'yes', 'on')
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'testserver']
+ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost,testserver').split(',') if h.strip()]
 
 
 # Application definition
@@ -78,12 +80,39 @@ WSGI_APPLICATION = 'messaging_app.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Database configuration
+# Use MySQL when MYSQL env vars are provided (docker-compose), otherwise fall back to SQLite for local/dev.
+if os.getenv('MYSQL_DATABASE'):
+    # Optional PyMySQL shim if mysqlclient is not available
+    try:
+        import MySQLdb  # type: ignore
+    except Exception:  # pragma: no cover - best effort fallback
+        try:
+            import pymysql  # type: ignore
+            pymysql.install_as_MySQLdb()
+        except Exception:
+            pass
+
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': os.getenv('MYSQL_DATABASE'),
+            'USER': os.getenv('MYSQL_USER', ''),
+            'PASSWORD': os.getenv('MYSQL_PASSWORD', ''),
+            'HOST': os.getenv('MYSQL_HOST', 'db'),
+            'PORT': os.getenv('MYSQL_PORT', '3306'),
+            'OPTIONS': {
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            },
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
