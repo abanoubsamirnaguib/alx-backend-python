@@ -82,7 +82,7 @@ WSGI_APPLICATION = 'messaging_app.wsgi.application'
 
 # Database configuration
 # Use MySQL when MYSQL env vars are provided (docker-compose), otherwise fall back to SQLite for local/dev.
-if os.getenv('MYSQL_DATABASE'):
+if os.getenv('MYSQL_DATABASE') or os.getenv('MYSQL_DB'):
     # Optional PyMySQL shim if mysqlclient is not available
     try:
         import MySQLdb  # type: ignore
@@ -93,14 +93,20 @@ if os.getenv('MYSQL_DATABASE'):
         except Exception:
             pass
 
+    mysql_name = os.getenv('MYSQL_DATABASE') or os.getenv('MYSQL_DB')
+    mysql_user = os.getenv('MYSQL_USER') or os.getenv('MYSQLUSER') or ''
+    mysql_pwd = os.getenv('MYSQL_PASSWORD', '')
+    mysql_host = os.getenv('MYSQL_HOST', 'db')
+    mysql_port = os.getenv('MYSQL_PORT', '3306')
+
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.mysql',
-            'NAME': os.getenv('MYSQL_DATABASE'),
-            'USER': os.getenv('MYSQL_USER', ''),
-            'PASSWORD': os.getenv('MYSQL_PASSWORD', ''),
-            'HOST': os.getenv('MYSQL_HOST', 'db'),
-            'PORT': os.getenv('MYSQL_PORT', '3306'),
+            'NAME': mysql_name,
+            'USER': mysql_user,
+            'PASSWORD': mysql_pwd,
+            'HOST': mysql_host,
+            'PORT': mysql_port,
             'OPTIONS': {
                 'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
             },
