@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+"""
+Kubernetes Django App Scaling Script
+====================================
+
+This script scales the Django messaging app deployment to 3 replicas,
+verifies the pods are running, performs load testing, and monitors resource usage.
+
+Requirements:
+- kubectl installed and configured
+- wrk load testing tool installed
+- Python 3.6+
+
+Usage: python3 kubctl-0x01
+"""
+
+import subprocess
+import time
+import sys
+import os
+
+
+def run_command(command, description=""):
+    """
+    Execute a shell command and return the result.
+    
+    Args:
+        command (str): The command to execute
+        description (str): Description of what the command does
+    
+    Returns:
+        tuple: (success, output, error)
+    """
+    print(f"\n{'='*50}")
+    if description:
+        print(f"🔄 {description}")
+    print(f"📋 Running: {command}")
+    print(f"{'='*50}")
+    
+    try:
+        result = subprocess.run(
+            command, 
+            shell=True, 
+            capture_output=True, 
+            text=True, 
+            timeout=60
+        )
+        
+        if result.stdout:
+            print("✅ Output:")
+            print(result.stdout)
+        
+        if result.stderr and result.returncode != 0:
+            print("❌ Error:")
+            print(result.stderr)
+            return False, result.stdout, result.stderr
+        
+        return True, result.stdout, result.stderr
+        
+    except subprocess.TimeoutExpired:
+        print("⏰ Command timed out after 60 seconds")
+        return False, "", "Command timed out"
+    except Exception as e:
+        print(f"💥 Exception occurred: {str(e)}")
+        return False, "", str(e)
+
+
+def check_kubectl():
+    """Check if kubectl is installed and accessible."""
+    print("🔍 Checking if kubectl is available...")
+    success, _, _ = run_command("kubectl version --client", "Checking kubectl installation")
+    if not success:
+        print("❌ kubectl is not installed or not in PATH")
+        print("💡 Please install kubectl and ensure it's configured properly")
+        return False
+    print("✅ kubectl is available")
+    return True
+
+
+def scale_deployment():
+    """Scale the Django app deployment to 3 replicas."""
+    deployment_name = "django-messaging-app"
+    replicas = 3
+    
+    print(f"🚀 Scaling deployment '{deployment_name}' to {replicas} replicas...")
+    
+    command = f"kubectl scale deployment {deployment_name} --replicas={replicas}"
+    success, output, error = run_command(
+        command, 
+        f"Scaling {deployment_name} to {replicas} replicas"
+    )
+    
+    if not success:
+        print(f"❌ Failed to scale deployment: {error}")
+        return False
+    
+    print(f"✅ Successfully scaled {deployment_name} to {replicas} replicas")
+    return True
+
+
+def verify_pods():
+    """Verify that multiple pods are running."""
+    print("🔍 Verifying that pods are running...")
+    
+    # Wait a bit for pods to start
+    print("⏳ Waiting 30 seconds for pods to start...")
+    time.sleep(30)
+    
+    # Get pods with specific deployment label
+    command = "kubectl get pods -l app=django-messaging-app"
+    success, output, error = run_command(
+        command, 
+        "Getting pods for django-messaging-app"
+    )
+    
+    if not success:
+        print(f"❌ Failed to get pods: {error}")
+        return False
+    
+    # Count running pods
+    lines = output.strip().split('\n')
+    if len(lines) <= 1:  # Only header line
+        print("❌ No pods found")
+        return False
+    
+    running_pods = 0
+    for line in lines[1:]:  # Skip header
+        if 'Running' in line:
+            running_pods += 1
+    
+    print(f"📊 Found {running_pods} running pods")
+    
+    # Also show general pod status
+    run_command("kubectl get pods", "Getting all pods status")
+    
+    return running_pods >= 3
+
+
+def perform_load_testing():
+    """Perform load testing using wrk if available."""
+    print("🏋️ Performing load testing...")
+    
+    # First, check if wrk is available
+    print("🔍 Checking if wrk is available...")
+    success, _, _ = run_command("wrk --version", "Checking wrk installation")
+    
+    if not success:
+        print("⚠️ wrk is not installed. Skipping load testing.")
+        print("💡 To install wrk:")
+        print("   - On Ubuntu/Debian: sudo apt-get install wrk")
+        print("   - On macOS: brew install wrk")
+        print("   - On Windows: Download from https://github.com/wg/wrk")
+        return False
+    
+    # Get service URL - assuming service is exposed
+    print("🔍 Getting service information...")
+    run_command("kubectl get services", "Getting services")
+    
+    # For demonstration, we'll use a generic load test
+    # In real scenario, you'd need to get the actual service endpoint
+    service_url = "http://localhost:8000"  # Default Django port
+    
+    print(f"🚀 Running load test against {service_url}")
+    print("📝 Note: Make sure the service is properly exposed and accessible")
+    
+    # Run a simple load test: 10 connections, 30 seconds, 2 threads
+    command = f"wrk -t2 -c10 -d30s {service_url}/admin/"
+    success, output, error = run_command(
+        command, 
+        f"Load testing {service_url} for 30 seconds"
+    )
+    
+    if success:
+        print("✅ Load testing completed successfully")
+    else:
+        print("⚠️ Load testing encountered issues (this might be expected if service isn't exposed)")
+    
+    return success
+
+
+def monitor_resources():
+    """Monitor resource usage using kubectl top."""
+    print("📊 Monitoring resource usage...")
+    
+    # Check if metrics server is available
+    print("🔍 Checking metrics server availability...")
+    success, _, _ = run_command("kubectl top nodes", "Checking metrics server")
+    
+    if not success:
+        print("⚠️ Metrics server is not available or not installed")
+        print("💡 To install metrics server:")
+        print("   kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml")
+        print("📝 Skipping resource monitoring...")
+        return False
+    
+    # Monitor node resources
+    run_command("kubectl top nodes", "Getting node resource usage")
+    
+    # Monitor pod resources
+    run_command("kubectl top pods", "Getting pod resource usage")
+    
+    # Monitor specific deployment pods
+    command = "kubectl top pods -l app=django-messaging-app"
+    run_command(command, "Getting django-messaging-app pods resource usage")
+    
+    return True
+
+
+def main():
+    """Main function to orchestrate the scaling process."""
+    print("🎯 Django App Kubernetes Scaling Script")
+    print("=" * 50)
+    
+    # Step 1: Check prerequisites
+    if not check_kubectl():
+        sys.exit(1)
+    
+    # Step 2: Scale the deployment
+    if not scale_deployment():
+        print("❌ Failed to scale deployment. Exiting...")
+        sys.exit(1)
+    
+    # Step 3: Verify pods are running
+    if not verify_pods():
+        print("⚠️ Not all pods are running as expected")
+    
+    # Step 4: Perform load testing
+    perform_load_testing()
+    
+    # Step 5: Monitor resource usage
+    monitor_resources()
+    
+    print("\n🎉 Scaling process completed!")
+    print("📋 Summary of actions performed:")
+    print("   ✅ Scaled django-messaging-app deployment to 3 replicas")
+    print("   ✅ Verified pod status")
+    print("   ✅ Attempted load testing (if wrk available)")
+    print("   ✅ Monitored resource usage (if metrics server available)")
+    
+    print("\n💡 Useful follow-up commands:")
+    print("   - Check pods: kubectl get pods -l app=django-messaging-app")
+    print("   - Check deployment: kubectl get deployment django-messaging-app")
+    print("   - Scale down: kubectl scale deployment django-messaging-app --replicas=1")
+    print("   - Delete deployment: kubectl delete deployment django-messaging-app")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n⏹️ Script interrupted by user")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n💥 Unexpected error: {str(e)}")
+        sys.exit(1)
