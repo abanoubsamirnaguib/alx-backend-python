@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# kubctl-0x03: Rolling Update Script for Django Messaging App
+# Simple script for junior Python developers
+
+echo "🚀 Starting Rolling Update for Django Messaging App..."
+
+# Apply the updated deployment
+echo "📦 Applying blue deployment update..."
+kubectl apply -f blue_deployment.yaml
+
+# Check if the apply command was successful
+if [ $? -eq 0 ]; then
+    echo "✅ Deployment file applied successfully"
+else
+    echo "❌ Failed to apply deployment file"
+    exit 1
+fi
+
+# Monitor the rolling update progress
+echo "⏳ Monitoring rolling update progress..."
+kubectl rollout status deployment/django-messaging-app-blue --timeout=300s
+
+# Check if rollout was successful
+if [ $? -eq 0 ]; then
+    echo "✅ Rolling update completed successfully"
+else
+    echo "❌ Rolling update failed or timed out"
+    exit 1
+fi
+
+# Get service IP for testing (assuming minikube or similar)
+SERVICE_URL=$(kubectl get service django-messaging-service-blue -o jsonpath='{.spec.clusterIP}'):8000
+
+echo "🔍 Testing application availability..."
+echo "Service URL: $SERVICE_URL"
+
+# Test the application with simple curl requests
+echo "📡 Sending test requests to check for downtime..."
+for i in {1..5}; do
+    echo "Request $i:"
+    curl -s -o /dev/null -w "Status: %{http_code}, Time: %{time_total}s\n" http://$SERVICE_URL/admin/ || echo "Request failed"
+    sleep 2
+done
+
+# Verify current pods
+echo "🔍 Checking current pods status..."
+kubectl get pods -l app=django-messaging-app,version=blue
+
+echo "✅ Rolling update process completed!"
+echo "📊 Current deployment status:"
+kubectl get deployment django-messaging-app-blue
