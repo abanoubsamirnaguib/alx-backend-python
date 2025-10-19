@@ -1,0 +1,164 @@
+# Django Messaging App Kubernetes Deployment
+# This deployment includes both the Django application and MySQL database
+
+# Django Application Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-messaging-app
+  labels:
+    app: django-messaging-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: django-messaging-app
+  template:
+    metadata:
+      labels:
+        app: django-messaging-app
+    spec:
+      containers:
+      - name: django-messaging-app
+        image: django-messaging-app:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DEBUG
+          value: "0"
+        - name: DJANGO_SECRET_KEY
+          value: "django-insecure-change-this-in-production-k8s-deployment"
+        - name: ALLOWED_HOSTS
+          value: "*"
+        - name: MYSQL_DATABASE
+          value: "messaging_db"
+        - name: MYSQL_USER
+          value: "django_user"
+        - name: MYSQL_PASSWORD
+          value: "django_password"
+        - name: MYSQL_HOST
+          value: "mysql-service"
+        - name: MYSQL_PORT
+          value: "3306"
+        livenessProbe:
+          httpGet:
+            path: /admin/
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /admin/
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 3
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+# Django Application Service (ClusterIP for internal access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: django-messaging-service
+  labels:
+    app: django-messaging-app
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: django-messaging-app
+
+---
+# MySQL Database Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  labels:
+    app: mysql
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:8.0
+        ports:
+        - containerPort: 3306
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: "rootpassword"
+        - name: MYSQL_DATABASE
+          value: "messaging_db"
+        - name: MYSQL_USER
+          value: "django_user"
+        - name: MYSQL_PASSWORD
+          value: "django_password"
+        volumeMounts:
+        - name: mysql-storage
+          mountPath: /var/lib/mysql
+        livenessProbe:
+          exec:
+            command:
+            - mysqladmin
+            - ping
+            - -h
+            - localhost
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - mysqladmin
+            - ping
+            - -h
+            - localhost
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: mysql-storage
+        emptyDir: {}
+
+---
+# MySQL Service (ClusterIP for internal access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+  labels:
+    app: mysql
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3306
+    targetPort: 3306
+    protocol: TCP
+  selector:
+    app: mysql
