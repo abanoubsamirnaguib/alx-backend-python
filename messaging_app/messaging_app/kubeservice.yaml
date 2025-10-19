@@ -1,0 +1,58 @@
+# Main Service for Blue-Green Deployment
+# This service routes traffic to the active version (blue or green)
+apiVersion: v1
+kind: Service
+metadata:
+  name: django-messaging-service
+  labels:
+    app: django-messaging-app
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: django-messaging-app
+    version: blue  # Initially points to blue version
+
+---
+# Blue Version Service (for testing)
+apiVersion: v1
+kind: Service
+metadata:
+  name: django-messaging-service-blue-test
+  labels:
+    app: django-messaging-app
+    version: blue
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8001
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: django-messaging-app
+    version: blue
+
+---
+# Green Version Service (for testing)
+apiVersion: v1
+kind: Service
+metadata:
+  name: django-messaging-service-green-test
+  labels:
+    app: django-messaging-app
+    version: green
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8002
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: django-messaging-app
+    version: green

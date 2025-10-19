@@ -1,22 +1,25 @@
 # Django Messaging App Kubernetes Deployment
 # This deployment includes both the Django application and MySQL database
 
-# Django Application Deployment
+# Django Application Blue Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: django-messaging-app
+  name: django-messaging-app-blue
   labels:
     app: django-messaging-app
+    version: blue
 spec:
   replicas: 2
   selector:
     matchLabels:
       app: django-messaging-app
+      version: blue
   template:
     metadata:
       labels:
         app: django-messaging-app
+        version: blue
     spec:
       containers:
       - name: django-messaging-app
@@ -63,13 +66,14 @@ spec:
             cpu: "500m"
 
 ---
-# Django Application Service (ClusterIP for internal access)
+# Django Application Blue Service (ClusterIP for internal access)
 apiVersion: v1
 kind: Service
 metadata:
-  name: django-messaging-service
+  name: django-messaging-service-blue
   labels:
     app: django-messaging-app
+    version: blue
 spec:
   type: ClusterIP
   ports:
@@ -79,6 +83,7 @@ spec:
     name: http
   selector:
     app: django-messaging-app
+    version: blue
 
 ---
 # MySQL Database Deployment
