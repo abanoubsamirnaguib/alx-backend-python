@@ -12,7 +12,10 @@ pipeline {
         stage('Checkout') {
             steps {
                 script {
-                    echo "========== Checking out source code =========="
+                    echo "========== Checking out source code from GitHub =========="
+                    echo "Repository: ${REPO_URL}"
+                    echo "Branch: ${REPO_BRANCH}"
+                    
                     checkout([$class: 'GitSCM',
                         branches: [[name: "*/${REPO_BRANCH}"]],
                         userRemoteConfigs: [[
@@ -20,6 +23,10 @@ pipeline {
                             credentialsId: 'github-credentials'
                         ]]
                     ])
+                    
+                    sh 'git branch'
+                    sh 'git status'
+                    sh 'pwd'
                 }
             }
         }
@@ -29,12 +36,10 @@ pipeline {
                 script {
                     echo "========== Setting up Python environment =========="
                     sh '''
-                        python --version
-                        python -m pip install --upgrade pip
-                        python -m venv venv
-                        . venv/Scripts/activate || . venv/bin/activate
-                        pip install -r ${APP_DIR}/requirements.txt
-                        pip install pytest pytest-django pytest-cov
+                        python3 --version
+                        python3 -m pip3 install --upgrade pip
+                        python3 -m venv venv
+                        . venv/bin/activate || . venv/Scripts/activate
                     '''
                 }
             }
@@ -45,9 +50,11 @@ pipeline {
                 script {
                     echo "========== Installing project dependencies =========="
                     sh '''
-                        . venv/Scripts/activate || . venv/bin/activate
-                        cd ${APP_DIR}
-                        pip install -r requirements.txt
+                        . venv/bin/activate || . venv/Scripts/activate
+                        echo "Installing from messaging_app/requirements.txt"
+                        pip3 install -r messaging_app/requirements.txt
+                        pip3 install pytest pytest-django pytest-cov
+                        pip3 list
                     '''
                 }
             }
@@ -58,8 +65,8 @@ pipeline {
                 script {
                     echo "========== Running pytest tests =========="
                     sh '''
-                        . venv/Scripts/activate || . venv/bin/activate
-                        cd ${APP_DIR}
+                        . venv/bin/activate || . venv/Scripts/activate
+                        cd messaging_app
                         pytest --verbose \
                                --junitxml=test-results.xml \
                                --cov=chats \
@@ -77,8 +84,19 @@ pipeline {
                     echo "========== Generating test reports =========="
                     sh '''
                         echo "Test report generation completed"
-                        ls -la ${APP_DIR}/test-results.xml || echo "No test results file found"
-                        ls -la ${APP_DIR}/coverage_html/ || echo "No coverage report found"
+                        if [ -f messaging_app/test-results.xml ]; then
+                            echo "Test results file found:"
+                            ls -lah messaging_app/test-results.xml
+                        else
+                            echo "No test results file found"
+                        fi
+                        
+                        if [ -d messaging_app/coverage_html ]; then
+                            echo "Coverage report found:"
+                            ls -lah messaging_app/coverage_html/
+                        else
+                            echo "No coverage report found"
+                        fi
                     '''
                 }
             }
@@ -88,9 +106,9 @@ pipeline {
             steps {
                 script {
                     echo "========== Archiving test and coverage reports =========="
-                    junit allowEmptyResults: true, testResults: '${APP_DIR}/test-results.xml'
+                    junit allowEmptyResults: true, testResults: 'messaging_app/test-results.xml'
                     publishHTML([
-                        reportDir: '${APP_DIR}/coverage_html',
+                        reportDir: 'messaging_app/coverage_html',
                         reportFiles: 'index.html',
                         reportName: 'Code Coverage Report',
                         allowMissing: true,
@@ -104,7 +122,7 @@ pipeline {
     post {
         always {
             echo "========== Pipeline Execution Completed =========="
-            cleanWs()
+            echo "Build Status: ${currentBuild.result}"
         }
         success {
             echo "========== Pipeline succeeded! =========="
