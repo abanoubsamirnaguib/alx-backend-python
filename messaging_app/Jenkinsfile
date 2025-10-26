@@ -1,0 +1,116 @@
+pipeline {
+    agent any
+
+    environment {
+        PYTHON_VERSION = '3.9'
+        REPO_URL = 'https://github.com/abanoubsamirnaguib/alx-backend-python.git'
+        REPO_BRANCH = 'main'
+        APP_DIR = 'messaging_app'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    echo "========== Checking out source code =========="
+                    checkout([$class: 'GitSCM',
+                        branches: [[name: "*/${REPO_BRANCH}"]],
+                        userRemoteConfigs: [[
+                            url: "${REPO_URL}",
+                            credentialsId: 'github-credentials'
+                        ]]
+                    ])
+                }
+            }
+        }
+
+        stage('Setup Environment') {
+            steps {
+                script {
+                    echo "========== Setting up Python environment =========="
+                    sh '''
+                        python --version
+                        python -m pip install --upgrade pip
+                        python -m venv venv
+                        . venv/Scripts/activate || . venv/bin/activate
+                        pip install -r ${APP_DIR}/requirements.txt
+                        pip install pytest pytest-django pytest-cov
+                    '''
+                }
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                script {
+                    echo "========== Installing project dependencies =========="
+                    sh '''
+                        . venv/Scripts/activate || . venv/bin/activate
+                        cd ${APP_DIR}
+                        pip install -r requirements.txt
+                    '''
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                script {
+                    echo "========== Running pytest tests =========="
+                    sh '''
+                        . venv/Scripts/activate || . venv/bin/activate
+                        cd ${APP_DIR}
+                        pytest --verbose \
+                               --junitxml=test-results.xml \
+                               --cov=chats \
+                               --cov-report=html:coverage_html \
+                               --cov-report=term \
+                               chats/tests.py || true
+                    '''
+                }
+            }
+        }
+
+        stage('Generate Test Report') {
+            steps {
+                script {
+                    echo "========== Generating test reports =========="
+                    sh '''
+                        echo "Test report generation completed"
+                        ls -la ${APP_DIR}/test-results.xml || echo "No test results file found"
+                        ls -la ${APP_DIR}/coverage_html/ || echo "No coverage report found"
+                    '''
+                }
+            }
+        }
+
+        stage('Archive Reports') {
+            steps {
+                script {
+                    echo "========== Archiving test and coverage reports =========="
+                    junit allowEmptyResults: true, testResults: '${APP_DIR}/test-results.xml'
+                    publishHTML([
+                        reportDir: '${APP_DIR}/coverage_html',
+                        reportFiles: 'index.html',
+                        reportName: 'Code Coverage Report',
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true
+                    ])
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "========== Pipeline Execution Completed =========="
+            cleanWs()
+        }
+        success {
+            echo "========== Pipeline succeeded! =========="
+        }
+        failure {
+            echo "========== Pipeline failed! =========="
+        }
+    }
+}
