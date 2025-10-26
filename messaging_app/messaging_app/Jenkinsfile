@@ -6,6 +6,12 @@ pipeline {
         REPO_URL = 'https://github.com/abanoubsamirnaguib/alx-backend-python.git'
         REPO_BRANCH = 'main'
         APP_DIR = 'messaging_app'
+        DOCKER_REGISTRY = 'docker.io'
+        DOCKER_USERNAME = credentials('docker-username')
+        DOCKER_PASSWORD = credentials('docker-password')
+        IMAGE_NAME = "abanoubsamirnaguib/messaging-app"
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        LATEST_TAG = "latest"
     }
 
     stages {
@@ -114,6 +120,69 @@ pipeline {
                         allowMissing: true,
                         alwaysLinkToLastBuild: true
                     ])
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    echo "========== Building Docker image =========="
+                    echo "Image Name: ${IMAGE_NAME}"
+                    echo "Image Tag: ${IMAGE_TAG}"
+                    echo "Latest Tag: ${LATEST_TAG}"
+                    
+                    sh '''
+                        cd messaging_app
+                        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} \
+                                     -t ${IMAGE_NAME}:${LATEST_TAG} \
+                                     -f Dockerfile .
+                        
+                        echo "========== Docker image built successfully =========="
+                        docker images | grep ${IMAGE_NAME}
+                    '''
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    echo "========== Pushing Docker image to Docker Hub =========="
+                    
+                    sh '''
+                        echo "Logging in to Docker Hub..."
+                        echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin ${DOCKER_REGISTRY}
+                        
+                        echo "Pushing image with tag ${IMAGE_TAG}..."
+                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                        
+                        echo "Pushing image with tag ${LATEST_TAG}..."
+                        docker push ${IMAGE_NAME}:${LATEST_TAG}
+                        
+                        echo "========== Docker image pushed successfully =========="
+                        echo "Image pushed to: ${IMAGE_NAME}:${IMAGE_TAG}"
+                        echo "Image pushed to: ${IMAGE_NAME}:${LATEST_TAG}"
+                        
+                        docker logout
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Docker Image') {
+            steps {
+                script {
+                    echo "========== Verifying Docker image on Docker Hub =========="
+                    sh '''
+                        echo "Docker images built locally:"
+                        docker images | grep ${IMAGE_NAME} || echo "No local images found"
+                        
+                        echo ""
+                        echo "To pull and verify the image from Docker Hub, run:"
+                        echo "docker pull ${IMAGE_NAME}:${IMAGE_TAG}"
+                        echo "docker run -p 8000:8000 ${IMAGE_NAME}:${IMAGE_TAG}"
+                    '''
                 }
             }
         }
